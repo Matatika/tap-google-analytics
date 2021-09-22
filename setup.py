@@ -1,6 +1,16 @@
 #!/usr/bin/env python
 from setuptools import setup
 
+test_deps = [
+    'pytest',
+    'pylint',
+    "mock",
+]
+
+extras = {
+    'test': test_deps,
+}
+
 setup(
     name="tap-google-analytics",
     version="0.1.2",
@@ -13,9 +23,12 @@ setup(
     install_requires=[
         "singer-python==5.6.1",
         "google-api-python-client==1.7.9",
+        "google-auth==2.1.0",
         "oauth2client==4.1.3",
         "backoff==1.3.2"
     ],
+    tests_require=test_deps,
+    extras_require=extras,
     entry_points="""
     [console_scripts]
     tap-google-analytics=tap_google_analytics:main

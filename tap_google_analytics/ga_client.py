@@ -4,12 +4,15 @@ import logging
 import json
 import singer
 import socket
+import datetime
 
-from apiclient.discovery import build
-from apiclient.errors import HttpError
+from googleapiclient.http import HttpRequest
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from oauth2client.service_account import ServiceAccountCredentials
 from oauth2client.client import GoogleCredentials
+from google.oauth2.credentials import Credentials
 
 from tap_google_analytics.error import *
 
@@ -62,21 +65,27 @@ def is_fatal_error(error):
     LOGGER.critical("Received fatal error %s, reason=%s, status=%s", error, reason, status)
     return True
 
-
 class GAClient:
     def __init__(self, config):
+        self.config = config
         self.view_id = config['view_id']
         self.start_date = config['start_date']
         self.end_date = config['end_date']
         self.quota_user = config.get('quota_user', None)
 
+        self.requestBuilder = self.initialize_requestbuilder()
         self.credentials = self.initialize_credentials(config)
         self.analytics = self.initialize_analyticsreporting()
 
         (self.dimensions_ref, self.metrics_ref) = self.fetch_metadata()
 
+    def initialize_requestbuilder(self):
+        return HttpRequest
+
     def initialize_credentials(self, config):
-        if config.get('oauth_credentials', {}).get('access_token', None):
+        if config.get('authorization', {}).get('bearer_token', None):
+            return Credentials(token=config['authorization']['bearer_token'], refresh_handler=self.refresh_handler)
+        elif config.get('oauth_credentials', {}).get('access_token', None):
             return GoogleCredentials(
                 access_token=config['oauth_credentials']['access_token'],
                 refresh_token=config['oauth_credentials']['refresh_token'],
@@ -88,6 +97,18 @@ class GAClient:
             )
         else:
             return ServiceAccountCredentials.from_json_keyfile_dict(config['client_secrets'], SCOPES)
+
+    def refresh_handler(self, request, scopes):
+        """Google Credentials callback to refresh and expired token
+        
+        Returns:
+            The current token and an expiry date time of now.
+            
+            refresh_handler is only called when token no longer valid, this
+              response simply signals the token has expired.   
+        """
+        expiry = datetime.datetime.now()
+        return self.config['authorization']['bearer_token'], expiry
 
     def initialize_analyticsreporting(self):
         """Initializes an Analytics Reporting API V4 service object.
@@ -118,7 +139,7 @@ class GAClient:
         # This is needed in order to dynamically fetch the metadata for available
         #   metrics and dimensions.
         # (those are not provided in the Analytics Reporting API V4)
-        service = build('analytics', 'v3', credentials=self.credentials)
+        service = build('analytics', 'v3', credentials=self.credentials, requestBuilder=self.requestBuilder)
 
         results = service.metadata().columns().list(reportType='ga', quotaUser=self.quota_user).execute()
 

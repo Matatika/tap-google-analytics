@@ -129,8 +129,10 @@ def process_args():
         LOGGER.critical("tap-google-analytics: a valid view_id must be provided.")
         sys.exit(1)
 
-    if not args.config.get('key_file_location') and not args.config.get('oauth_credentials'):
-        LOGGER.critical("tap-google-analytics: a valid key_file_location string or oauth_credentials object must be provided.")
+    if not args.config.get('key_file_location') \
+        and not args.config.get('oauth_credentials') \
+        and not args.config.get('authorization'):
+        LOGGER.critical("tap-google-analytics: a valid key_file_location string or oauth_credentials or authorization object must be provided.")
         sys.exit(1)
 
     # Remove optional args that have empty strings as values
@@ -163,6 +165,11 @@ def process_args():
                 sys.exit(1)
         else:
             LOGGER.critical("tap-google-analytics: '{}' file not found".format(args.config['key_file_location']))
+            sys.exit(1)
+    elif args.config.get('authorization'):
+        credentials = args.config['authorization']
+        if not credentials.get('bearer_token'):
+            LOGGER.critical("tap-google-analytics: a valid bearer_token for authorization must be provided.")
             sys.exit(1)
     else:
         # If using oauth credentials, verify that all required keys are present
