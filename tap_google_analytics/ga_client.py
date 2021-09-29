@@ -14,7 +14,14 @@ from oauth2client.service_account import ServiceAccountCredentials
 from oauth2client.client import GoogleCredentials
 from google.oauth2.credentials import Credentials
 
-from tap_google_analytics.error import *
+from tap_google_analytics.error import (
+    TapGaAuthenticationError,
+    TapGaBackendServerError,
+    TapGaInvalidArgumentError,
+    TapGaQuotaExceededError,
+    TapGaRateLimitError, 
+    TapGaUnknownError
+)
 
 SCOPES = ['https://www.googleapis.com/auth/analytics.readonly']
 
@@ -159,19 +166,19 @@ class GAClient:
 
         return (dimensions, metrics)
 
-    def lookup_data_type(self, type, attribute):
+    def lookup_data_type(self, ga_type, attribute):
         """
         Get the data type of a metric or a dimension
         """
         try:
-            if type == 'dimension':
+            if ga_type == 'dimension':
                 if attribute.startswith(('ga:dimension', 'ga:customVarName', 'ga:customVarValue')):
                     # Custom Google Analytics Dimensions that are not part of
                     #  self.dimensions_ref. They are always strings
                     return 'string'
 
                 attr_type = self.dimensions_ref[attribute]
-            elif type == 'metric':
+            elif ga_type == 'metric':
                 # Custom Google Analytics Metrics {ga:goalXXStarts, ga:metricXX, ... }
                 # We always treat them as as strings as we can not be sure of their data type
                 if attribute.startswith('ga:goal') and attribute.endswith(('Starts', 'Completions', 'Value', 'ConversionRate', 'Abandons', 'AbandonRate')):
@@ -184,10 +191,10 @@ class GAClient:
 
                 attr_type = self.metrics_ref[attribute]
             else:
-                LOGGER.critical(f"Unsuported GA type: {type}")
+                LOGGER.critical(f"Unsupported GA type: {ga_type}")
                 sys.exit(1)
         except KeyError:
-            LOGGER.critical(f"Unsuported GA {type}: {attribute}")
+            LOGGER.critical(f"Unsupported GA {ga_type}: {attribute}")
             sys.exit(1)
 
         data_type = 'string'
@@ -318,7 +325,7 @@ class GAClient:
 
                     record[header.replace("ga:","ga_")] = value
 
-                for i, values in enumerate(dateRangeValues):
+                for _, values in enumerate(dateRangeValues):
                     for metricHeader, value in zip(metricHeaders, values.get('values')):
                         metric_name = metricHeader.get('name')
                         metric_type = self.lookup_data_type('metric', metric_name)

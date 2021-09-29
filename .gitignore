@@ -107,3 +107,4 @@ files/
 
 client_secrets.json
 reports.json
+/.pytest_cache/
