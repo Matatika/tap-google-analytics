@@ -73,6 +73,7 @@ class TestGAClient(unittest.TestCase):
             'end_date': datetime.datetime.now().strftime("%Y-%m-%d"),
             'oauth_credentials': { 
                 'refresh_proxy_url': 'https://localhost/tokens/oauth2-google/token',
+                'refresh_proxy_url_auth': 'Bearer mock-bearer',
                 'access_token': 'mock-token',
                 'refresh_token': 'mock-refresh-token' 
             },
@@ -110,6 +111,11 @@ class TestGAClient(unittest.TestCase):
         # when discover default catalog with 'oauth_credentials.refresh_proxy_url'
         catalog = tap_google_analytics.discover(mock_config)
         
+        # expect refresh_proxy_url_auth to be used in token request
+        token_request = self.mock_http.requests[3]
+        token_request_headers = token_request[3]
+        self.assertEqual(token_request_headers['authorization'], "Bearer mock-bearer")
+
         # expect access_token response to be used in metadata request
         metadata_request = self.mock_http.requests[4]
         metadata_request_headers = metadata_request[3]

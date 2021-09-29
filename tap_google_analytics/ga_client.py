@@ -83,7 +83,8 @@ class GAClient:
         self.quota_user = config.get('quota_user', None)
 
         self.credentials = self.initialize_credentials(config)
-        self.http = self.initialize_auth_http()
+        self.http = self.initialize_http()
+        self.auth_http = self.initialize_auth_http()
         self.requestBuilder = self.initialize_requestbuilder()
         self.analytics = self.initialize_analyticsreporting()
 
@@ -96,8 +97,7 @@ class GAClient:
         return Http()
 
     def initialize_auth_http(self):
-        http = self.initialize_http()
-        return AuthorizedHttp(http=http, credentials=self.credentials)
+        return AuthorizedHttp(http=self.http, credentials=self.credentials)
 
     def initialize_credentials(self, config):
         if config.get('authorization', {}).get('bearer_token', None):
@@ -147,17 +147,17 @@ class GAClient:
         del request, scopes
         headers = {}        
         if self.oauth_credentials.get('refresh_proxy_url_auth', None):
-            headers["Authorization"] = self.oauth_credentials['refresh_proxy_url_auth']
+            headers["authorization"] = self.oauth_credentials['refresh_proxy_url_auth']
         request_body = {
             'grant_type': 'refresh_token',
             'refresh_token': self.oauth_credentials['refresh_token']
         }
-        content = self.http.request(
+        (_, content) = self.http.request(
             self.oauth_credentials['refresh_proxy_url'], 
             method="POST",
             body=json.dumps(request_body),
             headers=headers
-        )[1]
+        )
         result = json.loads(content)
         token = result['access_token']
         seconds_delta = datetime.timedelta(0, result['expires_in'])
@@ -171,7 +171,7 @@ class GAClient:
         Returns:
             An authorized Analytics Reporting API V4 service object.
         """
-        return build('analyticsreporting', 'v4', http=self.http)
+        return build('analyticsreporting', 'v4', http=self.auth_http)
 
     def fetch_metadata(self):
         """
@@ -194,7 +194,7 @@ class GAClient:
         # This is needed in order to dynamically fetch the metadata for available
         #   metrics and dimensions.
         # (those are not provided in the Analytics Reporting API V4)
-        service = build('analytics', 'v3', http=self.http, requestBuilder=self.requestBuilder)
+        service = build('analytics', 'v3', http=self.auth_http, requestBuilder=self.requestBuilder)
 
         results = service.metadata().columns().list(reportType='ga', quotaUser=self.quota_user).execute()
 

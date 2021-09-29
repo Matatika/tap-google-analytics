@@ -37,7 +37,8 @@ class MockHttp(object):
         self.requests.append(
             (method, url, body, headers, redirections, connection_type)
         )
-        return self.responses.pop(0)
+        response = self.responses.pop(0)
+        return response, response.data
 
 
 class MockResponse(object):
