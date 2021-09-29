@@ -183,13 +183,15 @@ def process_args():
             LOGGER.critical("tap-google-analytics: a valid refresh_token for the oauth_credentials must be provided.")
             sys.exit(1)
 
-        if not credentials.get('client_id'):
-            LOGGER.critical("tap-google-analytics: a valid client_id for the oauth_credentials must be provided.")
-            sys.exit(1)
+        if not credentials.get('refresh_proxy_url'):
 
-        if not credentials.get('client_secret'):
-            LOGGER.critical("tap-google-analytics: a valid client_secret for the oauth_credentials must be provided.")
-            sys.exit(1)
+            if not credentials.get('client_id'):
+                LOGGER.critical("tap-google-analytics: a valid client_id for the oauth_credentials must be provided.")
+                sys.exit(1)
+    
+            if not credentials.get('client_secret'):
+                LOGGER.critical("tap-google-analytics: a valid client_secret for the oauth_credentials must be provided.")
+                sys.exit(1)
 
     return args
 

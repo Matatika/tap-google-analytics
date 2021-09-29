@@ -14,6 +14,9 @@ from oauth2client.service_account import ServiceAccountCredentials
 from oauth2client.client import GoogleCredentials
 from google.oauth2.credentials import Credentials
 
+from httplib2 import Http
+from google_auth_httplib2 import AuthorizedHttp
+
 from tap_google_analytics.error import (
     TapGaAuthenticationError,
     TapGaBackendServerError,
@@ -74,14 +77,14 @@ def is_fatal_error(error):
 
 class GAClient:
     def __init__(self, config):
-        self.config = config
         self.view_id = config['view_id']
         self.start_date = config['start_date']
         self.end_date = config['end_date']
         self.quota_user = config.get('quota_user', None)
 
-        self.requestBuilder = self.initialize_requestbuilder()
         self.credentials = self.initialize_credentials(config)
+        self.http = self.initialize_auth_http()
+        self.requestBuilder = self.initialize_requestbuilder()
         self.analytics = self.initialize_analyticsreporting()
 
         (self.dimensions_ref, self.metrics_ref) = self.fetch_metadata()
@@ -89,9 +92,23 @@ class GAClient:
     def initialize_requestbuilder(self):
         return HttpRequest
 
+    def initialize_http(self):
+        return Http()
+
+    def initialize_auth_http(self):
+        http = self.initialize_http()
+        return AuthorizedHttp(http=http, credentials=self.credentials)
+
     def initialize_credentials(self, config):
         if config.get('authorization', {}).get('bearer_token', None):
-            return Credentials(token=config['authorization']['bearer_token'], refresh_handler=self.refresh_handler)
+            self.authorization = config['authorization']
+            return Credentials(token=config['authorization']['bearer_token'], refresh_handler=self.noop_refresh_handler)
+        elif config.get('oauth_credentials', {}).get('refresh_proxy_url', None) \
+                and config.get('oauth_credentials', {}).get('access_token', None) \
+                and config.get('oauth_credentials', {}).get('refresh_token', None):
+            # overriding the refresh request, via a token broker / proxy
+            self.oauth_credentials = config['oauth_credentials']
+            return Credentials(token=config['oauth_credentials']['access_token'], refresh_handler=self.proxy_refresh_handler)
         elif config.get('oauth_credentials', {}).get('access_token', None):
             return GoogleCredentials(
                 access_token=config['oauth_credentials']['access_token'],
@@ -105,17 +122,48 @@ class GAClient:
         else:
             return ServiceAccountCredentials.from_json_keyfile_dict(config['client_secrets'], SCOPES)
 
-    def refresh_handler(self, request, scopes):
-        """Google Credentials callback to refresh and expired token
+    def noop_refresh_handler(self, request, scopes):
+        """google.oauth2.credentials.Credentials callback to refresh an expired token
         
         Returns:
             The current token and an expiry date time of now.
             
-            refresh_handler is only called when token no longer valid, this
-              response simply signals the token has expired.   
+            noop_refresh_handler is only called when bearer_token no longer valid, this
+              function performs No Operation and its response simply signals the token 
+              has expired.   
         """
+        del request, scopes
         expiry = datetime.datetime.now()
-        return self.config['authorization']['bearer_token'], expiry
+        return self.authorization['bearer_token'], expiry
+
+    def proxy_refresh_handler(self, request, scopes):
+        """google.oauth2.credentials.Credentials callback to refresh an expired token
+        
+        Returns:
+            Makes an Auth2 'refresh_token' request to the 'oauth_credentials.refresh_url'.
+            
+            proxy_refresh_handler is only called when access_token is no longer valid.   
+        """
+        del request, scopes
+        headers = {}        
+        if self.oauth_credentials.get('refresh_proxy_url_auth', None):
+            headers["Authorization"] = self.oauth_credentials['refresh_proxy_url_auth']
+        request_body = {
+            'grant_type': 'refresh_token',
+            'refresh_token': self.oauth_credentials['refresh_token']
+        }
+        content = self.http.request(
+            self.oauth_credentials['refresh_proxy_url'], 
+            method="POST",
+            body=json.dumps(request_body),
+            headers=headers
+        )[1]
+        result = json.loads(content)
+        token = result['access_token']
+        seconds_delta = datetime.timedelta(0, result['expires_in'])
+        expiry = datetime.datetime.now() + seconds_delta
+
+        return token, expiry
 
     def initialize_analyticsreporting(self):
         """Initializes an Analytics Reporting API V4 service object.
@@ -123,7 +171,7 @@ class GAClient:
         Returns:
             An authorized Analytics Reporting API V4 service object.
         """
-        return build('analyticsreporting', 'v4', credentials=self.credentials)
+        return build('analyticsreporting', 'v4', http=self.http)
 
     def fetch_metadata(self):
         """
@@ -146,7 +194,7 @@ class GAClient:
         # This is needed in order to dynamically fetch the metadata for available
         #   metrics and dimensions.
         # (those are not provided in the Analytics Reporting API V4)
-        service = build('analytics', 'v3', credentials=self.credentials, requestBuilder=self.requestBuilder)
+        service = build('analytics', 'v3', http=self.http, requestBuilder=self.requestBuilder)
 
         results = service.metadata().columns().list(reportType='ga', quotaUser=self.quota_user).execute()
 
