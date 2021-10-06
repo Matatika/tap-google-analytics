@@ -11,7 +11,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from oauth2client.service_account import ServiceAccountCredentials
-from oauth2client.client import GoogleCredentials, _raise_exception_for_missing_fields
+from oauth2client.client import GoogleCredentials
 from google.oauth2.credentials import Credentials
 
 from httplib2 import Http
@@ -181,7 +181,8 @@ class GAClient:
         elif self.auth_http == None:
             return build('analyticsreporting', 'v4', credentials=self.credentials) 
         else:
-            sys.exit("No valid way to use your credentials.")
+            LOGGER.critical("No valid way to use your credentials.")
+            sys.exit(1)
 
     def fetch_metadata(self):
         """
@@ -206,7 +207,8 @@ class GAClient:
         elif self.auth_http == None:
             service = build('analytics', 'v3', credentials=self.credentials, requestBuilder=self.requestBuilder)
         else:
-            sys.exit("No valid way to use your credentials.")
+            LOGGER.critical("No valid way to use your credentials.")
+            sys.exit(1)
 
         results = service.metadata().columns().list(reportType='ga', quotaUser=self.quota_user).execute()
 
