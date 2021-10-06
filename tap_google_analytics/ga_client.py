@@ -148,16 +148,20 @@ class GAClient:
         headers = {}        
         if self.oauth_credentials.get('refresh_proxy_url_auth', None):
             headers["authorization"] = self.oauth_credentials['refresh_proxy_url_auth']
+        headers["Content-Type"] = "application/json"
+        headers["Accept"] = "application/json"
         request_body = {
             'grant_type': 'refresh_token',
             'refresh_token': self.oauth_credentials['refresh_token']
         }
-        (_, content) = self.http.request(
+        LOGGER.debug("Requesting token [%s], [%s], [%s]", self.oauth_credentials['refresh_proxy_url'], headers, request_body)
+        (resp, content) = self.http.request(
             self.oauth_credentials['refresh_proxy_url'], 
             method="POST",
             body=json.dumps(request_body),
             headers=headers
         )
+        LOGGER.debug("Refresh token response [%s], [%s], [%s]", resp.status, resp.reason, content) 
         result = json.loads(content)
         token = result['access_token']
         seconds_delta = datetime.timedelta(0, result['expires_in'])
