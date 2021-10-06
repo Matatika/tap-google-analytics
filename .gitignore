@@ -88,6 +88,9 @@ ENV/
 # Rope project settings
 .ropeproject
 
+#vscode
+.vscode
+
 # Mac
 ._*
 .DS_Store
@@ -107,4 +110,5 @@ files/
 
 client_secrets.json
 reports.json
+
 /.pytest_cache/

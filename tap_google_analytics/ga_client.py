@@ -79,7 +79,7 @@ class GAClient:
     def __init__(self, config):
         self.view_id = config['view_id']
         self.start_date = config['start_date']
-        self.end_date = config['end_date']
+        self.end_date = config.get('end_date', None)
         self.quota_user = config.get('quota_user', None)
 
         self.credentials = self.initialize_credentials(config)
@@ -93,11 +93,15 @@ class GAClient:
     def initialize_requestbuilder(self):
         return HttpRequest
 
+
     def initialize_http(self):
         return Http()
 
     def initialize_auth_http(self):
-        return AuthorizedHttp(http=self.http, credentials=self.credentials)
+        if type(self.credentials) == Credentials:
+            return AuthorizedHttp(http=self.http, credentials=self.credentials)
+        else:
+            return None
 
     def initialize_credentials(self, config):
         if config.get('authorization', {}).get('bearer_token', None):
@@ -105,7 +109,9 @@ class GAClient:
             return Credentials(token=config['authorization']['bearer_token'], refresh_handler=self.noop_refresh_handler)
         elif config.get('oauth_credentials', {}).get('refresh_proxy_url', None) \
                 and config.get('oauth_credentials', {}).get('access_token', None) \
-                and config.get('oauth_credentials', {}).get('refresh_token', None):
+                and config.get('oauth_credentials', {}).get('refresh_token', None) \
+                and config.get('oauth_credentials', {}).get('client_id') == None \
+                and config.get('oauth credentials', {}).get('client_secret') == None:
             # overriding the refresh request, via a token broker / proxy
             self.oauth_credentials = config['oauth_credentials']
             return Credentials(token=config['oauth_credentials']['access_token'], refresh_handler=self.proxy_refresh_handler)
@@ -171,23 +177,25 @@ class GAClient:
 
     def initialize_analyticsreporting(self):
         """Initializes an Analytics Reporting API V4 service object.
-
         Returns:
             An authorized Analytics Reporting API V4 service object.
         """
-        return build('analyticsreporting', 'v4', http=self.auth_http)
+        if self.auth_http != None:
+            return build('analyticsreporting', 'v4', http=self.auth_http)
+        elif self.auth_http == None:
+            return build('analyticsreporting', 'v4', credentials=self.credentials) 
+        else:
+            LOGGER.critical("No valid way to use your credentials.")
+            sys.exit(1)
 
     def fetch_metadata(self):
         """
         Fetch the valid (dimensions, metrics) for the Analytics Reporting API
          and their data types.
-
         Returns:
           A map of (dimensions, metrics) hashes
-
           Each available dimension can be found in dimensions with its data type
             as the value. e.g. dimensions['ga:userType'] == STRING
-
           Each available metric can be found in metrics with its data type
             as the value. e.g. metrics['ga:sessions'] == INTEGER
         """
@@ -198,7 +206,13 @@ class GAClient:
         # This is needed in order to dynamically fetch the metadata for available
         #   metrics and dimensions.
         # (those are not provided in the Analytics Reporting API V4)
-        service = build('analytics', 'v3', http=self.auth_http, requestBuilder=self.requestBuilder)
+        if self.auth_http != None:
+            service = build('analytics', 'v3', http=self.auth_http, requestBuilder=self.requestBuilder)
+        elif self.auth_http == None:
+            service = build('analytics', 'v3', credentials=self.credentials, requestBuilder=self.requestBuilder)
+        else:
+            LOGGER.critical("No valid way to use your credentials.")
+            sys.exit(1)
 
         results = service.metadata().columns().list(reportType='ga', quotaUser=self.quota_user).execute()
 
@@ -313,7 +327,6 @@ class GAClient:
                           giveup=is_fatal_error)
     def query_api(self, report_definition, pageToken=None):
         """Queries the Analytics Reporting API V4.
-
         Returns:
             The Analytics Reporting API V4 response.
         """
@@ -334,10 +347,8 @@ class GAClient:
 
     def process_response(self, response):
         """Processes the Analytics Reporting API V4 response.
-
         Args:
             response: An Analytics Reporting API V4 response.
-
         Returns: (nextPageToken, results)
             nextPageToken: The next Page Token
              If it is not None then the maximum pageSize has been reached
