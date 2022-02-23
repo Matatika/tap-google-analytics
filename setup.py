@@ -13,7 +13,7 @@ extras = {
 
 setup(
     name="tap-google-analytics",
-    version="0.1.2",
+    version="0.3.0",
     description="Singer.io tap for extracting data from the Google Analytics Reporting API",
     author='Meltano Team & Contributors',
     author_email="meltano@gitlab.com",
